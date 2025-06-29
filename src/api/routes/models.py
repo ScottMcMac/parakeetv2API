@@ -6,7 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.api.dependencies import get_request_id, verify_api_key
-from src.models import ModelInfo, ModelListResponse, get_model_info, get_model_list
+from src.models import ModelInfo, ModelListResponse
+from src.services import model_service
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +56,7 @@ async def list_models(
     Returns a list of models that are available for transcription.
     All models use the same parakeet-tdt-0.6b-v2 backend.
     """
-    logger.info(f"List models request - request_id: {request_id}")
-    
-    return get_model_list()
+    return model_service.list_models(request_id=request_id)
 
 
 @router.get(
@@ -113,12 +112,9 @@ async def get_model(
     Raises:
         HTTPException: If model is not found
     """
-    logger.info(f"Get model request - model_id: {model_id}, request_id: {request_id}")
-    
-    model_info = get_model_info(model_id)
+    model_info = model_service.get_model_info(model_id, request_id=request_id)
     
     if model_info is None:
-        logger.warning(f"Model not found: {model_id}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={

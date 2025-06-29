@@ -51,13 +51,13 @@ def temp_audio_file() -> Generator[Path, None, None]:
 @pytest.fixture
 def test_audio_dir() -> Path:
     """Get the path to test audio files."""
-    return Path(__file__).parent.parent / "tests" / "audio_files"
+    return Path(__file__).parent / "audio_files"
 
 
 @pytest.fixture
 def test_non_audio_dir() -> Path:
     """Get the path to test non-audio files."""
-    return Path(__file__).parent.parent / "tests" / "non_audio_files"
+    return Path(__file__).parent / "non_audio_files"
 
 
 @pytest.fixture(autouse=True)

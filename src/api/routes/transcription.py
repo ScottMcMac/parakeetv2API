@@ -6,7 +6,6 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from src.api.dependencies import get_request_id, verify_api_key
-from src.core import audio_processor, model_manager
 from src.core.exceptions import (
     AudioProcessingError,
     AudioValidationError,
@@ -16,7 +15,7 @@ from src.core.exceptions import (
     UnsupportedParameterError,
 )
 from src.models import TranscriptionRequest, TranscriptionResponse
-from src.utils import sanitize_filename, validate_file_extension, validate_file_size
+from src.services import transcription_service
 
 logger = logging.getLogger(__name__)
 
@@ -187,81 +186,17 @@ async def transcribe_audio(
             }
         )
     
-    # Sanitize filename
-    safe_filename = sanitize_filename(file.filename)
-    
-    # Validate file extension
-    try:
-        extension = validate_file_extension(safe_filename)
-    except AudioValidationError as e:
-        logger.warning(f"Invalid file extension: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "invalid_request_error",
-                    "param": "file",
-                    "code": "invalid_file_format"
-                }
-            }
-        )
-    
     # Read file content
     content = await file.read()
     
-    # Validate file size
+    # Use transcription service to handle the entire workflow
     try:
-        validate_file_size(len(content))
-    except AudioValidationError as e:
-        logger.warning(f"File too large: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "invalid_request_error",
-                    "param": "file",
-                    "code": "file_too_large"
-                }
-            }
+        return await transcription_service.transcribe_audio(
+            file_content=content,
+            filename=file.filename,
+            request=request,
+            request_id=request_id,
         )
-    
-    # Save uploaded file
-    try:
-        uploaded_file_path = await audio_processor.save_uploaded_file(content, safe_filename)
-    except AudioProcessingError as e:
-        logger.error(f"Failed to save uploaded file: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "message": "Failed to process uploaded file",
-                    "type": "server_error",
-                    "code": "file_processing_error"
-                }
-            }
-        )
-    
-    # Process and transcribe
-    processed_file_path = None
-    needs_cleanup = False
-    
-    try:
-        # Process audio file (validate and convert if needed)
-        processed_file_path, needs_cleanup = await audio_processor.process_audio_file(uploaded_file_path)
-        
-        # Transcribe
-        transcriptions = model_manager.transcribe(processed_file_path)
-        
-        # Get the first (and only) transcription
-        text = transcriptions[0] if transcriptions else ""
-        
-        logger.info(f"Transcription successful - request_id: {request_id}, length: {len(text)}")
-        
-        # Return response
-        return TranscriptionResponse(text=text)
-        
     except AudioValidationError as e:
         logger.warning(f"Audio validation error: {e.message}")
         raise HTTPException(
@@ -323,14 +258,3 @@ async def transcribe_audio(
                 }
             }
         )
-    finally:
-        # Cleanup temporary files
-        try:
-            # Always cleanup uploaded file
-            await audio_processor.cleanup_temp_file(uploaded_file_path)
-            
-            # Cleanup processed file if it's different from uploaded
-            if needs_cleanup and processed_file_path and processed_file_path != uploaded_file_path:
-                await audio_processor.cleanup_temp_file(processed_file_path)
-        except Exception as e:
-            logger.warning(f"Cleanup error: {str(e)}")
