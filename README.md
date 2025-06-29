@@ -1,67 +1,62 @@
 # parakeetv2API
 
-This project will serve parakeet-tdt-0.6b-v2 as an OpenAI API compatable transcription endpoint (e.g. http://0.0.0.0:8005/v1/audio/transcriptions). It will use Python and FastAPI to create the API. Eventually the goal is to make it easy to deploy via LXC and Docker. For now we are just deploying via python. 
+This project will serve parakeet-tdt-0.6b-v2 as an OpenAI API compatable transcription endpoint (e.g. http://0.0.0.0:8005/v1/audio/transcriptions). It will use Python and FastAPI to create the API. Eventually the goal is to make it easy to deploy via LXC and Docker. For now, we are just creating the Python code to serve the API. 
 
 Users will be able to connect to the API, submit an audio file, and recieve a transcription. 
 
+## Environment Setup
+
 We need two python packages to run this code `nemo_toolkit["asr"]` and `cuda-python>=12.3`
 
-I set it up as follows:
+I set up a conda environment as follows:
 
 ```
+sudo apt install build-essential cmake libprotoc-dev protobuf-compiler ffmpeg
 conda create -n nemo python=3.11
 conda activate nemo
 pip install -U nemo_toolkit["asr"]
 pip install cuda-python>=12.3
 ```
 
-Steps the server will take when initialized
+**This is where I've stopped. More packages may be needed as we develop the project.**
 
-To prepare to recieve, convert and transcribe audio, the following should be run on startup:
+## How the server will work
+
+This code must be run on a machine with an NVIDIA GPU to run the model. 
+
+The user should be able to specify the following
+
+- Whether to listen on just `localhost` or `0.0.0.0`
+- Which GPU to use if more than one are available (e.g. 0-3 if 4 NVIDIA GPUs are present)
+- The port on which to listen (default to 8005)
+
+
+### Steps the server will take when initialized
+
+To prepare to recieve and transcribe audio, the following should be run on startup:
 
 ```
 import nemo.collections.asr as nemo_asr
 asr_model = nemo_asr.models.ASRModel.from_pretrained(model_name="nvidia/parakeet-tdt-0.6b-v2")
 output = asr_model.transcribe(['./tests/audio_files/test_wav_16000Hz_mono.wav'])
-print(output[0].text)
+output = asr_model.transcribe(['./tests/audio_files/test_wav_16000Hz_mono_32bit.wav']) # Ensure model is ready for non 16-bit files
+output = asr_model.transcribe(['./tests/audio_files/test_flac_8000Hz_mono.flac'])
 ```
 
+The model should stay loaded to be ready for fast responses.
 
-
-
-
-Steps the server will take in response to a request:
+### Steps the server will take in response to a request
 
 - Check if the inputs are valid as specified below and return informative errors if now. 
-- Check if submitted file is valid type: flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm
+    - For checking valid file types first check if the extension is one of the valid inputs flac, mp3, mp4, mpeg, mpga, m4a, ogg, wav, or webm. Then, check if they contain valid audio data recognized by ffmpeg.
 - Check if submitted file is a type that works with parakeet-tdt-0.6b-v2: 16kHz, mono, .wav or .flac
     - If not, use ffmpeg to convert to 16kHz, mono, .wav
 - Return the appropriate response (described below)
-
-
-
-
-
-The above should return `The quick-brown fox jumped over the lazy dog.`
-
-
-
-Need to ensure model starts loaded and stays loaded and is always ready for fast transcription:
-
-
-
-Use python 3.11 environment.
-
-may need `sudo apt install build-essential cmake libprotoc-dev protobuf-compiler ffmpeg` before setting up environment
-
-"The quick brown fox jumped over the lazy dog." case insensitive and ignore punctuation.
-
-Need to make sure the model stays loaded at all times. 
-
+- Clean up (e.g. delete any cached files)
 
 # Handling Requests
 
-The OpenAI API specification allows for several items in the request body when making requests to `https://api.openai.com/v1/audio/transcriptions`. Here is how our server will handle each of them when requests are made to `serveraddress:port/v1/audio/transcriptions`.:
+The OpenAI API specification allows for several items in the request body when making requests to `https://api.openai.com/v1/audio/transcriptions`. Below is how our server will handle each of them when requests are made to `serveraddress:port/v1/audio/transcriptions`.:
 
 ## file 
 
@@ -171,3 +166,8 @@ it should respond with something like
 ```
 
 Since we don't actually care about tracking usage by token, but want to match the format of what the OpenAI API would provide. the server will just always say that there was 1 (audio) input token and 1 output token, for 2 "total_tokens".
+
+
+## Coding practices
+
+./tests/audio_files/ contains ... They should all return `The quick-brown fox jumped over the lazy dog.` (case insensitive and ignore punctuation)
