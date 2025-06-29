@@ -1,24 +1,24 @@
 # Core dependencies for parakeetv2API
 
 # Web framework
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi
+uvicorn[standard]
 
 # Data validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic
+pydantic-settings
 
 # File handling
-python-multipart==0.0.6
+python-multipart
 
 # NVIDIA NeMo for ASR
-nemo-toolkit[asr]==1.22.0
+nemo-toolkit[asr]
 
 # CUDA support
 cuda-python>=12.3
 
 # Async support
-aiofiles==23.2.1
+aiofiles
 
 # JSON handling
-orjson==3.9.10
+orjson
