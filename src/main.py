@@ -7,11 +7,14 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 
+from src.api import models_router, transcription_router
 from src.config import settings
+from src.core.exceptions import ParakeetAPIException
 from src.core.model_manager import model_manager
 
 # Configure logging
@@ -80,6 +83,67 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Exception handlers
+@app.exception_handler(ParakeetAPIException)
+async def parakeet_exception_handler(request: Request, exc: ParakeetAPIException):
+    """Handle custom parakeet API exceptions."""
+    logger.warning(f"ParakeetAPIException: {exc.message}")
+    return ORJSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "message": exc.message,
+                "type": "api_error",
+                "details": exc.details,
+            }
+        }
+    )
+
+
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with consistent error format."""
+    # If detail is already in the correct format, return as-is
+    if isinstance(exc.detail, dict) and "error" in exc.detail:
+        return ORJSONResponse(
+            status_code=exc.status_code,
+            content=exc.detail
+        )
+    
+    # Otherwise, wrap in standard error format
+    return ORJSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "message": str(exc.detail),
+                "type": "http_error",
+                "code": str(exc.status_code),
+            }
+        }
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions."""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return ORJSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "message": "An unexpected error occurred",
+                "type": "server_error", 
+                "code": "internal_error",
+            }
+        }
+    )
+
+
+# Include API routes
+app.include_router(transcription_router, prefix=settings.api_prefix)
+app.include_router(models_router, prefix=settings.api_prefix)
 
 
 @app.get("/", tags=["Health"])

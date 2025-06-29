@@ -2,7 +2,7 @@
 
 from typing import List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 
 from src.core.exceptions import UnsupportedParameterError
 
@@ -112,10 +112,10 @@ class TranscriptionRequest(BaseModel):
     
     @field_validator("stream")
     @classmethod
-    def validate_stream(cls, v: Optional[bool], values) -> Optional[bool]:
+    def validate_stream(cls, v: Optional[bool], info: ValidationInfo) -> Optional[bool]:
         """Validate stream parameter based on model."""
         if v is True:
-            model = values.data.get("model", "whisper-1")
+            model = info.data.get("model", "whisper-1") if info.data else "whisper-1"
             # Only error for OpenAI-style models when streaming is requested
             if model in ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]:
                 raise UnsupportedParameterError(
