@@ -126,8 +126,25 @@ class TranscriptionService:
             transcriptions = self.model_manager.transcribe(processed_file_path)
             inference_duration_ms = (time.time() - inference_start) * 1000
             
+            # Debug logging
+            logger.debug(
+                "transcription_result",
+                transcriptions_type=type(transcriptions).__name__,
+                transcriptions_length=len(transcriptions) if transcriptions else 0,
+                transcriptions_content=str(transcriptions)[:200] if transcriptions else None,
+            )
+            
             # Get the first (and only) transcription
             text = transcriptions[0] if transcriptions else ""
+            
+            # Ensure text is a string
+            if not isinstance(text, str):
+                logger.warning(
+                    "transcription_not_string",
+                    text_type=type(text).__name__,
+                    text_value=str(text)[:200],
+                )
+                text = str(text)
             
             # Log model inference performance
             performance_logger.log_model_inference(

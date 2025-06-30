@@ -114,7 +114,8 @@ class ModelManager:
             
             if existing_files:
                 logger.info(f"Running warmup with {len(existing_files)} test files")
-                _ = self._model.transcribe(existing_files)
+                # Use our transcribe method which handles different return types
+                _ = self.transcribe(existing_files)
                 logger.info("Model warmup completed")
             else:
                 logger.warning("No test files found for warmup, skipping")
@@ -153,15 +154,40 @@ class ModelManager:
         
         try:
             with torch.no_grad():
-                transcriptions = self._model.transcribe(
+                # NeMo ASR models can return different formats
+                results = self._model.transcribe(
                     audio_paths,
                     batch_size=batch_size,
                     return_hypotheses=False,
                 )
             
-            # Ensure we always return a list
-            if isinstance(transcriptions, str):
-                transcriptions = [transcriptions]
+            # Handle different return types from NeMo
+            transcriptions = []
+            
+            # If it's already a list of strings, use it directly
+            if isinstance(results, list) and all(isinstance(r, str) for r in results):
+                transcriptions = results
+            # If it's a single string, wrap it in a list
+            elif isinstance(results, str):
+                transcriptions = [results]
+            # If it's a list of Hypothesis objects or other complex types
+            elif isinstance(results, list):
+                for result in results:
+                    # Handle Hypothesis objects
+                    if hasattr(result, 'text'):
+                        transcriptions.append(result.text)
+                    # Handle string
+                    elif isinstance(result, str):
+                        transcriptions.append(result)
+                    # Handle other types by converting to string
+                    else:
+                        transcriptions.append(str(result))
+            # If it's a single Hypothesis object
+            elif hasattr(results, 'text'):
+                transcriptions = [results.text]
+            # Fallback: convert to string
+            else:
+                transcriptions = [str(results)]
             
             return transcriptions
             
