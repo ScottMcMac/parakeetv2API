@@ -2,11 +2,12 @@
 
 import io
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 from fastapi import status
 
+from src.services import transcription_service
 from src.utils.validators import compare_transcriptions
 
 
@@ -28,8 +29,8 @@ class TestE2ETranscription:
 
         # Mock the model manager and transcription to return expected text
         # Since we don't have the actual model loaded in tests
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -69,8 +70,8 @@ class TestE2ETranscription:
         if not test_audio_dir.exists():
             pytest.skip("Test audio directory not found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -106,8 +107,8 @@ class TestE2ETranscription:
         if not test_audio_dir.exists():
             pytest.skip("Test audio directory not found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -141,8 +142,8 @@ class TestE2ETranscription:
         if not test_audio_dir.exists():
             pytest.skip("Test audio directory not found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -176,8 +177,8 @@ class TestE2ETranscription:
         if not test_audio_dir.exists():
             pytest.skip("Test audio directory not found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -234,8 +235,8 @@ class TestE2ETranscription:
         if not audio_file:
             pytest.skip("No test audio files found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -264,8 +265,8 @@ class TestE2ETranscription:
     @pytest.mark.asyncio
     async def test_complete_api_workflow(self, async_client, test_audio_dir, expected_transcription):
         """Test complete API workflow: models list, model info, transcription."""
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             
@@ -308,8 +309,8 @@ class TestE2ETranscription:
         if not audio_files:
             pytest.skip("No WAV test files found")
 
-        with patch('src.core.model_manager.is_loaded', True), \
-             patch('src.core.model_manager.transcribe') as mock_transcribe:
+        with patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
+             patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe:
             
             mock_transcribe.return_value = [expected_transcription]
             

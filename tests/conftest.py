@@ -4,21 +4,14 @@ import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, AsyncIterator, Generator
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
 from src.main import app
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
 
 
 @pytest.fixture
@@ -28,8 +21,8 @@ def test_client() -> Generator[TestClient, None, None]:
         yield client
 
 
-@pytest.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
+@pytest_asyncio.fixture
+async def async_client():
     """Create an async test client for the FastAPI app."""
     async with AsyncClient(app=app, base_url="http://test") as client:
         yield client

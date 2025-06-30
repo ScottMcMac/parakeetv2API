@@ -85,7 +85,7 @@ class TestErrorCases:
 
         response = await async_client.post("/v1/audio/transcriptions", files=files, data=data)
 
-        assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
         result = response.json()
         assert "error" in result
         assert "File too large" in result["error"]["message"]

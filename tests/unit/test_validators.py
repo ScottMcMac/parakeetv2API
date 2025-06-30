@@ -103,7 +103,7 @@ class TestSanitizeFilename:
     def test_special_characters(self):
         """Test special character handling."""
         result = sanitize_filename("test@#$%^&*().wav")
-        assert result == "test________.wav"
+        assert result == "test_________.wav"
 
     def test_long_filename(self):
         """Test long filename truncation."""

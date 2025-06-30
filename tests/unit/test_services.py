@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -214,7 +214,7 @@ class TestTranscriptionService:
         
         with patch.object(transcription_service.audio_processor, 'save_uploaded_file') as mock_save, \
              patch.object(transcription_service.audio_processor, 'process_audio_file') as mock_process, \
-             patch.object(transcription_service.model_manager, 'is_loaded', True), \
+             patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
              patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe, \
              patch.object(transcription_service, '_cleanup_files') as mock_cleanup:
             
@@ -266,7 +266,7 @@ class TestTranscriptionService:
         
         with patch.object(transcription_service.audio_processor, 'save_uploaded_file') as mock_save, \
              patch.object(transcription_service.audio_processor, 'process_audio_file') as mock_process, \
-             patch.object(transcription_service.model_manager, 'is_loaded', False), \
+             patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=False)), \
              patch.object(transcription_service, '_cleanup_files') as mock_cleanup:
             
             mock_save.return_value = Path("/tmp/uploaded.wav")
@@ -287,7 +287,7 @@ class TestTranscriptionService:
         
         with patch.object(transcription_service.audio_processor, 'save_uploaded_file') as mock_save, \
              patch.object(transcription_service.audio_processor, 'process_audio_file') as mock_process, \
-             patch.object(transcription_service.model_manager, 'is_loaded', True), \
+             patch.object(transcription_service.model_manager.__class__, 'is_loaded', new_callable=lambda: PropertyMock(return_value=True)), \
              patch.object(transcription_service.model_manager, 'transcribe') as mock_transcribe, \
              patch.object(transcription_service, '_cleanup_files') as mock_cleanup:
             
