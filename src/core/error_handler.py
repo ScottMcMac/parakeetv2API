@@ -14,6 +14,7 @@ from src.core.exceptions import (
     AudioProcessingError,
     ModelError,
     ModelNotLoadedError,
+    UnsupportedParameterError,
 )
 from src.core.logging import get_logger
 
@@ -29,6 +30,7 @@ class ErrorHandler:
         AudioProcessingError: "audio_processing_error",
         ModelError: "model_error",
         ModelNotLoadedError: "model_not_loaded",
+        UnsupportedParameterError: "unsupported_parameter",
     }
     
     # Client-friendly error messages
@@ -37,6 +39,7 @@ class ErrorHandler:
         "audio_processing_error": "Failed to process the audio file. Please try again.",
         "model_error": "An error occurred during transcription. Please try again.",
         "model_not_loaded": "The transcription service is temporarily unavailable.",
+        "unsupported_parameter": "The specified parameter is not supported.",
         "rate_limit_exceeded": "Too many requests. Please slow down.",
         "internal_error": "An unexpected error occurred. Please try again later.",
     }
@@ -60,7 +63,7 @@ class ErrorHandler:
         """
         # Determine error code and type
         error_code = cls.ERROR_CODES.get(type(error), "internal_error")
-        error_type = "invalid_request_error" if isinstance(error, (AudioValidationError,)) else "api_error"
+        error_type = "invalid_request_error" if isinstance(error, (AudioValidationError, UnsupportedParameterError)) else "api_error"
         
         # Get user-friendly message
         if isinstance(error, ParakeetAPIException):
@@ -97,7 +100,7 @@ class ErrorHandler:
         Returns:
             HTTP status code
         """
-        if isinstance(error, AudioValidationError):
+        if isinstance(error, (AudioValidationError, UnsupportedParameterError)):
             return status.HTTP_400_BAD_REQUEST
         elif isinstance(error, AudioProcessingError):
             return status.HTTP_500_INTERNAL_SERVER_ERROR
