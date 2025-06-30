@@ -35,41 +35,33 @@ class AudioProcessor:
         self.temp_dir = Path(settings.temp_dir) if settings.temp_dir else Path(tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
     
-    async def validate_audio_file(self, file_path: Path) -> Dict[str, any]:
+    async def get_audio_metadata(self, file_path: Path) -> Optional[Dict[str, any]]:
         """
-        Validate audio file using FFprobe.
+        Get audio metadata using FFprobe (lightweight, no validation).
         
         Args:
             file_path: Path to the audio file
             
         Returns:
-            Audio metadata dictionary
-            
-        Raises:
-            AudioValidationError: If file is not valid audio
+            Audio metadata dictionary or None if extraction fails
         """
+        import time
+        start_time = time.time()
+        
         if not file_path.exists():
-            raise AudioValidationError(f"File not found: {file_path}")
+            return None
         
-        # Check file extension
-        extension = file_path.suffix.lower().lstrip(".")
-        if extension not in SUPPORTED_FORMATS:
-            raise AudioValidationError(
-                f"Unsupported file format: {extension}. "
-                f"Supported formats: {', '.join(sorted(SUPPORTED_FORMATS))}"
-            )
-        
-        # Use ffprobe to validate and get metadata
         try:
             cmd = [
                 "ffprobe",
-                "-v", "error",
+                "-v", "error", 
                 "-show_streams",
                 "-select_streams", "a:0",
                 "-of", "json",
                 str(file_path)
             ]
             
+            ffprobe_start = time.time()
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -77,22 +69,23 @@ class AudioProcessor:
             )
             
             stdout, stderr = await process.communicate()
+            ffprobe_duration = (time.time() - ffprobe_start) * 1000
             
             if process.returncode != 0:
-                error_msg = stderr.decode().strip() if stderr else "Unknown error"
-                raise AudioValidationError(f"Invalid audio file: {error_msg}")
+                logger.info(f"FFprobe failed for {file_path.name}, duration: {ffprobe_duration:.2f}ms")
+                return None
             
             # Parse metadata
             metadata = json.loads(stdout.decode())
             streams = metadata.get("streams", [])
             
             if not streams:
-                raise AudioValidationError("No audio stream found in file")
+                return None
             
             audio_stream = streams[0]
             
             # Extract relevant metadata
-            return {
+            result = {
                 "sample_rate": int(audio_stream.get("sample_rate", 0)),
                 "channels": int(audio_stream.get("channels", 0)),
                 "codec_name": audio_stream.get("codec_name", "unknown"),
@@ -100,29 +93,36 @@ class AudioProcessor:
                 "bit_rate": int(audio_stream.get("bit_rate", 0)),
             }
             
-        except asyncio.CancelledError:
-            raise
-        except AudioValidationError:
-            raise
+            total_duration = (time.time() - start_time) * 1000
+            logger.info(f"Metadata extraction for {file_path.name}: {total_duration:.2f}ms (FFprobe: {ffprobe_duration:.2f}ms)")
+            logger.info(f"Audio format: {result['sample_rate']}Hz, {result['channels']} channels, {result['codec_name']}")
+            
+            return result
+            
         except Exception as e:
-            logger.error(f"FFprobe error: {str(e)}")
-            raise AudioValidationError(f"Failed to validate audio file: {str(e)}")
+            total_duration = (time.time() - start_time) * 1000
+            logger.info(f"Failed to get metadata for {file_path.name} after {total_duration:.2f}ms: {str(e)}")
+            return None
     
-    async def needs_conversion(self, file_path: Path, metadata: Dict[str, any]) -> bool:
+    async def needs_conversion(self, file_path: Path, metadata: Optional[Dict[str, any]] = None) -> bool:
         """
         Check if audio file needs conversion for the model.
         
         Args:
             file_path: Path to the audio file
-            metadata: Audio metadata from validation
+            metadata: Optional audio metadata 
             
         Returns:
             True if conversion is needed
         """
+        # If no metadata, assume conversion is needed
+        if metadata is None:
+            return True
+            
         # Check if it's already in the correct format
         if (file_path.suffix.lower() in [".wav", ".flac"] and
-            metadata["sample_rate"] == TARGET_SAMPLE_RATE and
-            metadata["channels"] == TARGET_CHANNELS):
+            metadata.get("sample_rate") == TARGET_SAMPLE_RATE and
+            metadata.get("channels") == TARGET_CHANNELS):
             return False
         
         return True
@@ -182,7 +182,6 @@ class AudioProcessor:
         except Exception as e:
             logger.error(f"FFmpeg error: {str(e)}")
             raise AudioProcessingError(f"Failed to convert audio: {str(e)}")
-    
     async def process_audio_file(self, file_path: Path) -> Tuple[Path, bool]:
         """
         Process audio file for transcription.
@@ -194,19 +193,38 @@ class AudioProcessor:
             Tuple of (processed_file_path, needs_cleanup)
             
         Raises:
-            AudioValidationError: If validation fails
             AudioProcessingError: If processing fails
         """
-        # Validate the audio file
-        metadata = await self.validate_audio_file(file_path)
+        import time
+        start_time = time.time()
         
-        # Check if conversion is needed
-        if await self.needs_conversion(file_path, metadata):
-            # Convert the audio
-            converted_path = await self.convert_audio(file_path)
-            return converted_path, True
+        # Get metadata to check if conversion is needed
+        logger.info(f"Starting audio processing for {file_path.name}")
+        metadata = await self.get_audio_metadata(file_path)
+        
+        # Check if conversion is needed (handles None metadata gracefully)
+        needs_conv = await self.needs_conversion(file_path, metadata)
+        conversion_check_time = (time.time() - start_time) * 1000
+        
+        if needs_conv:
+            logger.info(f"Conversion needed for {file_path.name} (check took {conversion_check_time:.2f}ms)")
+            try:
+                # Convert the audio
+                convert_start = time.time()
+                converted_path = await self.convert_audio(file_path)
+                convert_duration = (time.time() - convert_start) * 1000
+                total_duration = (time.time() - start_time) * 1000
+                logger.info(f"Audio conversion completed in {convert_duration:.2f}ms (total: {total_duration:.2f}ms)")
+                return converted_path, True
+            except AudioProcessingError:
+                # Re-raise conversion errors
+                raise
+            except Exception as e:
+                # Wrap unexpected errors
+                raise AudioProcessingError(f"Unexpected error during conversion: {str(e)}")
         else:
-            # No conversion needed
+            total_duration = (time.time() - start_time) * 1000
+            logger.info(f"No conversion needed for {file_path.name} (total processing: {total_duration:.2f}ms)")
             return file_path, False
     
     async def cleanup_temp_file(self, file_path: Path) -> None:
@@ -234,6 +252,9 @@ class AudioProcessor:
         Returns:
             Path to saved file
         """
+        import time
+        start_time = time.time()
+        
         # Generate safe filename
         safe_filename = f"{os.urandom(16).hex()}_{Path(filename).name}"
         file_path = self.temp_dir / safe_filename
@@ -242,10 +263,14 @@ class AudioProcessor:
             async with aiofiles.open(file_path, "wb") as f:
                 await f.write(content)
             
+            duration = (time.time() - start_time) * 1000
+            logger.info(f"Saved uploaded file {filename} ({len(content)} bytes) in {duration:.2f}ms")
+            
             return file_path
             
         except Exception as e:
-            logger.error(f"Failed to save uploaded file: {str(e)}")
+            duration = (time.time() - start_time) * 1000
+            logger.error(f"Failed to save uploaded file after {duration:.2f}ms: {str(e)}")
             raise AudioProcessingError(f"Failed to save uploaded file: {str(e)}")
 
 

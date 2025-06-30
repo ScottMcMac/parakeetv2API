@@ -87,10 +87,12 @@ class ModelManager:
                 self._model = self._model.to(self.device)
                 self._model.eval()
                 
+                # Set loaded flag before warmup so transcribe method works
+                self._is_loaded = True
+                
                 # Warm up the model with test files to ensure it's ready
                 self._warmup_model()
                 
-                self._is_loaded = True
                 logger.info("Model loaded successfully")
                 
             except Exception as e:
