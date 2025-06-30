@@ -242,7 +242,6 @@ parakeetv2API/
 - File size limits
 
 #### 7.3 Deployment Preparation
-- Docker containerization
 - Health check endpoints
 - Graceful shutdown handling
 

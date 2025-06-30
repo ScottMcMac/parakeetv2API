@@ -1,15 +1,15 @@
 """Model information API routes."""
 
-import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.api.dependencies import get_request_id, verify_api_key
+from src.core.logging import get_logger
 from src.models import ModelInfo, ModelListResponse
 from src.services import model_service
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/models", tags=["Models"])
 

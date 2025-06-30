@@ -22,3 +22,8 @@ aiofiles
 
 # JSON handling
 orjson
+
+# Logging and monitoring
+structlog
+psutil
+pynvml  # For GPU monitoring

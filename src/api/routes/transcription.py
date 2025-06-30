@@ -1,11 +1,11 @@
 """Transcription API routes."""
 
-import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from src.api.dependencies import get_request_id, verify_api_key
+from src.core.error_handler import error_handler, with_error_handling
 from src.core.exceptions import (
     AudioProcessingError,
     AudioValidationError,
@@ -14,10 +14,11 @@ from src.core.exceptions import (
     ParakeetAPIException,
     UnsupportedParameterError,
 )
+from src.core.logging import get_logger
 from src.models import TranscriptionRequest, TranscriptionResponse
 from src.services import transcription_service
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/audio", tags=["Audio"])
 
@@ -114,7 +115,12 @@ async def transcribe_audio(
     This endpoint is compatible with the OpenAI API specification.
     All model parameters use the same parakeet-tdt-0.6b-v2 backend.
     """
-    logger.info(f"Transcription request - model: {model}, file: {file.filename}, request_id: {request_id}")
+    logger.info(
+        "transcription_request",
+        model=model,
+        filename=file.filename,
+        request_id=request_id,
+    )
     
     # Parse list parameters if provided as strings
     timestamp_granularities_list = None
@@ -147,20 +153,12 @@ async def transcribe_audio(
             stream=stream,
         )
     except UnsupportedParameterError as e:
-        logger.warning(f"Unsupported parameter: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "invalid_request_error",
-                    "param": e.details.get("parameter"),
-                    "code": "unsupported_parameter"
-                }
-            }
-        )
+        logger.warning("unsupported_parameter", parameter=e.details.get("parameter"), message=e.message)
+        status_code = error_handler.get_status_code(e)
+        response_data = error_handler.format_error_response(e, request_id=request_id)
+        raise HTTPException(status_code=status_code, detail=response_data)
     except Exception as e:
-        logger.error(f"Request validation error: {str(e)}")
+        logger.error("request_validation_error", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -197,64 +195,22 @@ async def transcribe_audio(
             request=request,
             request_id=request_id,
         )
-    except AudioValidationError as e:
-        logger.warning(f"Audio validation error: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "invalid_request_error",
-                    "param": "file",
-                    "code": "invalid_audio_file"
-                }
-            }
-        )
-    except AudioProcessingError as e:
-        logger.error(f"Audio processing error: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "server_error",
-                    "code": "audio_processing_error"
-                }
-            }
-        )
-    except ModelNotLoadedError as e:
-        logger.error(f"Model not loaded: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "server_error",
-                    "code": "model_not_loaded"
-                }
-            }
-        )
-    except ModelError as e:
-        logger.error(f"Model error: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "message": e.message,
-                    "type": "server_error",
-                    "code": "transcription_failed"
-                }
-            }
-        )
+    except ParakeetAPIException as e:
+        # Use centralized error handler for our custom exceptions
+        status_code = error_handler.get_status_code(e)
+        response_data = error_handler.format_error_response(e, request_id=request_id)
+        raise HTTPException(status_code=status_code, detail=response_data)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        # Log unexpected errors
+        logger.error(
+            "unexpected_transcription_error",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            request_id=request_id,
+            exc_info=True,
+        )
+        # Use generic error response
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": {
-                    "message": "An unexpected error occurred",
-                    "type": "server_error",
-                    "code": "internal_error"
-                }
-            }
+            detail=error_handler.format_error_response(e, request_id=request_id)
         )

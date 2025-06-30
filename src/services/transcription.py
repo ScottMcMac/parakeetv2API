@@ -1,6 +1,6 @@
 """Transcription service for orchestrating audio transcription workflow."""
 
-import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -11,10 +11,11 @@ from src.core.exceptions import (
     ModelError,
     ModelNotLoadedError,
 )
+from src.core.logging import get_logger, performance_logger
 from src.models import TranscriptionRequest, TranscriptionResponse
 from src.utils import sanitize_filename, validate_file_extension, validate_file_size
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TranscriptionService:
@@ -50,9 +51,14 @@ class TranscriptionService:
             ModelError: If transcription fails
             ModelNotLoadedError: If model is not loaded
         """
+        start_time = time.time()
+        
         logger.info(
-            f"Starting transcription - model: {request.model}, "
-            f"file: {filename}, request_id: {request_id}"
+            "transcription_started",
+            model=request.model,
+            filename=filename,
+            file_size=len(file_content),
+            request_id=request_id,
         )
 
         # Validate and sanitize filename
@@ -61,17 +67,17 @@ class TranscriptionService:
         # Validate file extension
         try:
             extension = validate_file_extension(safe_filename)
-            logger.debug(f"File extension validated: {extension}")
+            logger.debug("file_extension_validated", extension=extension)
         except AudioValidationError as e:
-            logger.warning(f"Invalid file extension: {e.message}")
+            logger.warning("invalid_file_extension", error=e.message, filename=filename)
             raise
 
         # Validate file size
         try:
             validate_file_size(len(file_content))
-            logger.debug(f"File size validated: {len(file_content)} bytes")
+            logger.debug("file_size_validated", size_bytes=len(file_content))
         except AudioValidationError as e:
-            logger.warning(f"File size validation failed: {e.message}")
+            logger.warning("file_size_validation_failed", error=e.message, size_bytes=len(file_content))
             raise
 
         # Save uploaded file
@@ -79,9 +85,9 @@ class TranscriptionService:
             uploaded_file_path = await self.audio_processor.save_uploaded_file(
                 file_content, safe_filename
             )
-            logger.debug(f"File saved to: {uploaded_file_path}")
+            logger.debug("file_saved", path=str(uploaded_file_path))
         except AudioProcessingError as e:
-            logger.error(f"Failed to save uploaded file: {e.message}")
+            logger.error("file_save_failed", error=e.message)
             raise
 
         # Process and transcribe
@@ -90,12 +96,25 @@ class TranscriptionService:
 
         try:
             # Process audio file (validate and convert if needed)
+            processing_start = time.time()
             processed_file_path, needs_cleanup = await self.audio_processor.process_audio_file(
                 uploaded_file_path
             )
+            processing_duration_ms = (time.time() - processing_start) * 1000
+            
             logger.debug(
-                f"Audio processing complete - processed: {processed_file_path}, "
-                f"needs_cleanup: {needs_cleanup}"
+                "audio_processing_complete",
+                processed_path=str(processed_file_path),
+                needs_cleanup=needs_cleanup,
+                duration_ms=round(processing_duration_ms, 2),
+            )
+            
+            # Log audio processing performance
+            performance_logger.log_audio_processing(
+                request_id=request_id,
+                operation="process_audio",
+                duration_ms=processing_duration_ms,
+                input_format=extension,
             )
 
             # Check if model is loaded
@@ -103,14 +122,30 @@ class TranscriptionService:
                 raise ModelNotLoadedError()
 
             # Transcribe using the model
+            inference_start = time.time()
             transcriptions = self.model_manager.transcribe(processed_file_path)
+            inference_duration_ms = (time.time() - inference_start) * 1000
             
             # Get the first (and only) transcription
             text = transcriptions[0] if transcriptions else ""
             
+            # Log model inference performance
+            performance_logger.log_model_inference(
+                request_id=request_id,
+                duration_ms=inference_duration_ms,
+                model=request.model,
+            )
+            
+            total_duration_ms = (time.time() - start_time) * 1000
+            
             logger.info(
-                f"Transcription successful - request_id: {request_id}, "
-                f"text_length: {len(text)}, model: {request.model}"
+                "transcription_completed",
+                request_id=request_id,
+                text_length=len(text),
+                model=request.model,
+                total_duration_ms=round(total_duration_ms, 2),
+                processing_duration_ms=round(processing_duration_ms, 2),
+                inference_duration_ms=round(inference_duration_ms, 2),
             )
 
             # Create and return response
@@ -120,7 +155,13 @@ class TranscriptionService:
             # Re-raise expected exceptions
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during transcription: {str(e)}", exc_info=True)
+            logger.error(
+                "transcription_failed",
+                error_type=type(e).__name__,
+                error_message=str(e),
+                request_id=request_id,
+                exc_info=True,
+            )
             raise ModelError(f"Transcription failed: {str(e)}")
 
         finally:
@@ -144,7 +185,7 @@ class TranscriptionService:
         try:
             # Always cleanup uploaded file
             await self.audio_processor.cleanup_temp_file(uploaded_file_path)
-            logger.debug(f"Cleaned up uploaded file: {uploaded_file_path}")
+            logger.debug("cleaned_up_uploaded_file", path=str(uploaded_file_path))
 
             # Cleanup processed file if it's different from uploaded
             if (
@@ -153,10 +194,10 @@ class TranscriptionService:
                 and processed_file_path != uploaded_file_path
             ):
                 await self.audio_processor.cleanup_temp_file(processed_file_path)
-                logger.debug(f"Cleaned up processed file: {processed_file_path}")
+                logger.debug("cleaned_up_processed_file", path=str(processed_file_path))
 
         except Exception as e:
-            logger.warning(f"Cleanup error: {str(e)}")
+            logger.warning("cleanup_error", error=str(e))
 
     def get_supported_models(self) -> list[str]:
         """

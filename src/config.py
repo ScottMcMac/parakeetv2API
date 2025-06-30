@@ -90,6 +90,10 @@ class Settings(BaseSettings):
         default=False,
         description="Enable auto-reload for development.",
     )
+    environment: str = Field(
+        default="production",
+        description="Environment (development, staging, production).",
+    )
 
     @field_validator("host")
     @classmethod
