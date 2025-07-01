@@ -158,15 +158,15 @@ class TestAudioService:
             "bit_rate": 256000
         }
         
-        with patch.object(audio_service.audio_processor, 'validate_audio_file') as mock_validate:
-            mock_validate.return_value = expected_metadata
+        with patch.object(audio_service.audio_processor, 'get_audio_metadata') as mock_get_metadata:
+            mock_get_metadata.return_value = expected_metadata
             
             metadata = await audio_service.get_audio_metadata(
                 temp_file, request_id="test-123"
             )
             
             assert metadata == expected_metadata
-            mock_validate.assert_called_once_with(temp_file)
+            mock_get_metadata.assert_called_once_with(temp_file)
 
     @pytest.mark.asyncio
     async def test_cleanup_file(self, temp_file):
@@ -191,15 +191,15 @@ class TestAudioService:
     @pytest.mark.asyncio
     async def test_validate_audio_content(self, temp_file):
         """Test validating audio content."""
-        with patch.object(audio_service.audio_processor, 'validate_audio_file') as mock_validate:
-            mock_validate.return_value = {"sample_rate": 16000}
+        with patch.object(audio_service.audio_processor, 'get_audio_metadata') as mock_get_metadata:
+            mock_get_metadata.return_value = {"sample_rate": 16000}
             
             result = await audio_service.validate_audio_content(
                 temp_file, request_id="test-123"
             )
             
             assert result is True
-            mock_validate.assert_called_once_with(temp_file)
+            mock_get_metadata.assert_called_once_with(temp_file)
 
 
 class TestTranscriptionService:

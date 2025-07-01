@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import aiofiles
+import soundfile as sf
 
 from src.config import settings
 from src.core.exceptions import AudioProcessingError, AudioValidationError
@@ -37,7 +38,7 @@ class AudioProcessor:
     
     async def get_audio_metadata(self, file_path: Path) -> Optional[Dict[str, any]]:
         """
-        Get audio metadata using FFprobe (lightweight, no validation).
+        Get audio metadata using soundfile (fast, no subprocesses).
         
         Args:
             file_path: Path to the audio file
@@ -52,6 +53,50 @@ class AudioProcessor:
             return None
         
         try:
+            # Use soundfile for fast metadata extraction (no subprocess)
+            info = sf.info(str(file_path))
+            
+            # Calculate approximate bit rate (not always accurate but sufficient)
+            # For PCM: bit_rate = sample_rate * channels * bits_per_sample
+            # Assume 16-bit for most audio files
+            estimated_bit_rate = info.samplerate * info.channels * 16
+            
+            result = {
+                "sample_rate": info.samplerate,
+                "channels": info.channels,
+                "codec_name": info.subtype.lower() if info.subtype else "unknown",
+                "duration": info.duration,
+                "bit_rate": estimated_bit_rate,
+            }
+            
+            total_duration = (time.time() - start_time) * 1000
+            logger.info(f"Metadata extraction for {file_path.name}: {total_duration:.2f}ms (soundfile)")
+            logger.info(f"Audio format: {result['sample_rate']}Hz, {result['channels']} channels, {result['codec_name']}")
+            
+            return result
+            
+        except Exception as e:
+            total_duration = (time.time() - start_time) * 1000
+            logger.info(f"Failed to get metadata for {file_path.name} after {total_duration:.2f}ms: {str(e)}")
+            
+            # Fallback to FFprobe for unsupported formats
+            logger.info(f"Falling back to FFprobe for {file_path.name}")
+            return await self._get_metadata_ffprobe(file_path)
+    
+    async def _get_metadata_ffprobe(self, file_path: Path) -> Optional[Dict[str, any]]:
+        """
+        Fallback metadata extraction using FFprobe for unsupported formats.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Audio metadata dictionary or None if extraction fails
+        """
+        import time
+        start_time = time.time()
+        
+        try:
             cmd = [
                 "ffprobe",
                 "-v", "error", 
@@ -61,7 +106,6 @@ class AudioProcessor:
                 str(file_path)
             ]
             
-            ffprobe_start = time.time()
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -69,10 +113,9 @@ class AudioProcessor:
             )
             
             stdout, stderr = await process.communicate()
-            ffprobe_duration = (time.time() - ffprobe_start) * 1000
             
             if process.returncode != 0:
-                logger.info(f"FFprobe failed for {file_path.name}, duration: {ffprobe_duration:.2f}ms")
+                logger.info(f"FFprobe fallback failed for {file_path.name}")
                 return None
             
             # Parse metadata
@@ -94,14 +137,13 @@ class AudioProcessor:
             }
             
             total_duration = (time.time() - start_time) * 1000
-            logger.info(f"Metadata extraction for {file_path.name}: {total_duration:.2f}ms (FFprobe: {ffprobe_duration:.2f}ms)")
-            logger.info(f"Audio format: {result['sample_rate']}Hz, {result['channels']} channels, {result['codec_name']}")
+            logger.info(f"FFprobe fallback for {file_path.name}: {total_duration:.2f}ms")
             
             return result
             
         except Exception as e:
             total_duration = (time.time() - start_time) * 1000
-            logger.info(f"Failed to get metadata for {file_path.name} after {total_duration:.2f}ms: {str(e)}")
+            logger.info(f"FFprobe fallback failed for {file_path.name} after {total_duration:.2f}ms: {str(e)}")
             return None
     
     async def needs_conversion(self, file_path: Path, metadata: Optional[Dict[str, any]] = None) -> bool:

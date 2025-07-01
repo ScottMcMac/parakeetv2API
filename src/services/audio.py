@@ -145,7 +145,9 @@ class AudioService:
         )
 
         try:
-            metadata = await self.audio_processor.validate_audio_file(file_path)
+            metadata = await self.audio_processor.get_audio_metadata(file_path)
+            if metadata is None:
+                raise AudioValidationError("Failed to extract audio metadata")
             logger.debug(f"Audio metadata retrieved: {metadata}")
             return metadata
         except AudioValidationError as e:
@@ -214,8 +216,10 @@ class AudioService:
         logger.debug(f"Validating audio content: {file_path}, request_id: {request_id}")
 
         try:
-            # Use the audio processor to validate
-            await self.audio_processor.validate_audio_file(file_path)
+            # Use the audio processor to get metadata (validates the file)
+            metadata = await self.audio_processor.get_audio_metadata(file_path)
+            if metadata is None:
+                raise AudioValidationError("Failed to validate audio content")
             logger.debug(f"Audio content validation passed: {file_path}")
             return True
         except AudioValidationError as e:
