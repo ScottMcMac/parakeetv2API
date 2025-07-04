@@ -242,3 +242,27 @@ and similarly for the other three supported model names.
 The code should make use of tests for all features to ensure everything works as expected. To support this `./tests/audio_files/` contains many audio_files that should all be tested against to ensure the software works as expected across various audio inputs. Some may need to be converted by ffmpeg. Once converted (if necessary), parakeet-tdt-0.6b-v2 should transcribe all the files to `The quick brown fox jumped over the lazy dog.` The tests should pass regardless of capitalization and punctuation, e.g. `the quick-brown fox jumped over the lazy Dog!` should also pass, but `The quick brown fax jumped over the lazy dog?` sould not. `./tests/non_audio_files/` contains two files that should trigger errors, but not crash the software. MisleadingEncoding.mp3 is not actually an mp3 file, and WrongType.txt is a text file. If submitted they server should send errors.
 
 Remember SOLID, KISS, and YAGNI!
+
+
+# Useage examples
+
+```
+curl http://192.168.1.96:8011/v1/audio/transcriptions \
+  -H "Content-Type: multipart/form-data" \
+  -F file="@~/Downloads/converted_audio/test_wav_16000Hz_mono.wav" \
+  -F model="gpt-4o-transcribe"
+
+curl http://192.168.1.96:8011/v1/audio/transcriptions \
+  -H "Content-Type: multipart/form-data" \
+  -F file="@~/Downloads/converted_audio/test_flac_16000Hz_mono.flac" \
+  -F model="parakeet-tdt-0.6b-v2"
+
+curl http://192.168.1.96:8011/v1/audio/transcriptions \
+  -H "Content-Type: multipart/form-data" \
+  -F file="@~/Downloads/converted_audio/test_wav_16000Hz_mono_32bit.wav" \
+  -F model="whisper-1"
+
+uvicorn src.main:app --host 0.0.0.0 --port 8011 --workers 1
+
+python -m pytest -v
+```
