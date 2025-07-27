@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  parakeetv2api:
+    build: .
+    ports:
+      - "8011:8011"
+    environment:
+      # Specify which GPU to use (default: 0)
+      # Can be overridden with: NVIDIA_VISIBLE_DEVICES=1 docker-compose up
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-0}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Mount local directory for development (optional)
+      - ./src:/app/src:ro
+    restart: unless-stopped
